@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "820189585854",
+    "project_id": "dubovozka",
+    "storage_bucket": "dubovozka.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:820189585854:android:2b6b9d04453cbf041f19ef",
+        "android_client_info": {
+          "package_name": "com.dada.dubovozka"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "820189585854-oev39iri8tqosomtbtck2jalu5vhc77n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7Y6UxKQzCWJbc_XhJWLmToY1WdYQMjs4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "820189585854-oev39iri8tqosomtbtck2jalu5vhc77n.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

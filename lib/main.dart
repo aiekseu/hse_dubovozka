@@ -1,12 +1,27 @@
-import 'package:dubovozka/app/schedule/data/schedule_provider.dart';
-import 'package:dubovozka/app/schedule/widgets/calendar_appbar.dart';
+import 'dart:convert';
+
+import 'package:dubovozka/data/schedule_provider.dart';
+import 'package:dubovozka/widgets/calendar_appbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'data/Schedule.dart';
 import 'firebase_options.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
+Future<http.Response> postDeviceId(String id) {
+  return http.post(
+    Uri.parse('https://dubovozka-notification.herokuapp.com/store_device'),
+    headers: <String, String>{
+      'Content-Type': 'application/json; charset=UTF-8',
+    },
+    body: jsonEncode(<String, String>{
+      'device_id': id,
+    }),
+  );
+}
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // If you're going to use other Firebase services in the background, such as Firestore,
@@ -46,6 +61,10 @@ Future<void> main() async {
     }
   });
 
+  final deviceToken = await FirebaseMessaging.instance.getToken();
+  final result = await postDeviceId(deviceToken!);
+  print('response - ' + result.body);
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -75,57 +94,275 @@ class MyApp extends ConsumerWidget {
           onBack: () {},
           locale: 'ru',
         ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const Text(
-                'Your device token:',
-              ),
-              DeviceToken()
-            ],
-          ),
+        body: const SafeArea(
+          child: ScheduleWidget(),
         ),
       ),
     );
   }
 }
 
-class DeviceToken extends StatefulWidget {
-  const DeviceToken({Key? key}) : super(key: key);
+class ScheduleWidget extends ConsumerStatefulWidget {
+  const ScheduleWidget({
+    Key? key,
+  }) : super(key: key);
 
   @override
-  State<DeviceToken> createState() => _DeviceTokenState();
+  ConsumerState createState() => _ScheduleWidgetState();
 }
 
-class _DeviceTokenState extends State<DeviceToken> {
-  late Future<String?> token;
+class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
+  late Future<Schedule> schedule;
 
   @override
   void initState() {
-    token = FirebaseMessaging.instance.getToken();
+    schedule = getSchedule();
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
+    final _pickedDate = ref.watch(pickedDateProvider);
+    print('VIBRANNAYA ATA');
+    print(_pickedDate);
+
     return Padding(
-      padding: EdgeInsets.all(16.0),
-      child: FutureBuilder<String?>(
-        future: token,
+      padding: const EdgeInsets.all(16.0),
+      child: FutureBuilder<Schedule>(
+        future: schedule,
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            return GestureDetector(
-              onTap: () async {await Clipboard.setData(ClipboardData(text: snapshot.data!));},
-                child: Text(snapshot.data!),
-            );
+            if (_pickedDate.weekday <= 5) {
+            return BusSchedule(schedule: snapshot.data!.weekdays);
+            }
+            if (_pickedDate.weekday == 6) {
+              return BusSchedule(schedule: snapshot.data?.saturday ?? {});
+            }
+            if (_pickedDate.weekday == 7) {
+              return BusSchedule(schedule: snapshot.data?.sunday ?? {});
+            }
           } else if (snapshot.hasError) {
             return Text('${snapshot.error}');
           }
-
           // By default, show a loading spinner.
           return const CircularProgressIndicator();
         },
+      ),
+    );
+  }
+}
+
+class BusSchedule extends ConsumerWidget {
+  const BusSchedule({Key? key, required this.schedule}) : super(key: key);
+
+  final Map<Direction, List<String>> schedule;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    List<List<Widget>> _getScheduleLists(List<String> items) {
+      List<Widget> col1 = [];
+      List<Widget> col2 = [];
+      List<Widget> col3 = [];
+      List<Widget> col4 = [];
+
+      int spot = (items.length / 4).round();
+
+      print(items.getRange(0, spot));
+
+      col1.addAll(items.getRange(0, spot).map((e) => Text(e)));
+      col2.addAll(items.getRange(spot, spot * 2).map((e) => Text(e)));
+      col3.addAll(items.getRange(spot * 2, spot * 3).map((e) => Text(e)));
+      col4.addAll(items.getRange(spot * 3, items.length).map((e) => Text(e)));
+
+      return [col1, col2, col3, col4];
+    }
+
+    return SizedBox(
+      width: MediaQuery.of(context).size.width,
+      height: MediaQuery.of(context).size.height - 240,
+      child: ListView(
+        children: [
+          Text('В Одинцово:'),
+          SizedBox(height: 8),
+          SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children:
+                      _getScheduleLists(schedule[Direction.toOdintsovo]!)[0],
+                ),
+                Column(
+                  children:
+                      _getScheduleLists(schedule[Direction.toOdintsovo]!)[1],
+                ),
+                Column(
+                  children:
+                      _getScheduleLists(schedule[Direction.toOdintsovo]!)[2],
+                ),
+                Column(
+                  children:
+                      _getScheduleLists(schedule[Direction.toOdintsovo]!)[3],
+                )
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+          Text('Из Одинцово:'),
+          SizedBox(height: 8),
+          SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromOdintsovo]!)[0],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromOdintsovo]!)[1],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromOdintsovo]!)[2],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromOdintsovo]!)[3],
+                )
+              ],
+            ),
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+          Text('На Молодежную:'),
+          SizedBox(height: 8),
+          SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toMolodezhnaya]!)[0],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toMolodezhnaya]!)[1],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toMolodezhnaya]!)[2],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toMolodezhnaya]!)[3],
+                )
+              ],
+            ),
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+          Text('От Молодежной:'),
+          SizedBox(height: 8),
+          SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromMolodezhnaya]!)[0],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromMolodezhnaya]!)[1],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromMolodezhnaya]!)[2],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromMolodezhnaya]!)[3],
+                )
+              ],
+            ),
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+          Text('На Славянский Бульвар:'),
+          SizedBox(height: 8),
+          SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toSlavyanskiy]!)[0],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toSlavyanskiy]!)[1],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toSlavyanskiy]!)[2],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.toSlavyanskiy]!)[3],
+                )
+              ],
+            ),
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+          Text('От Славянского Бульвара:'),
+          SizedBox(height: 8),
+          SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromSlavyanskiy]!)[0],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromSlavyanskiy]!)[1],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromSlavyanskiy]!)[2],
+                ),
+                Column(
+                  children:
+                  _getScheduleLists(schedule[Direction.fromSlavyanskiy]!)[3],
+                )
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
